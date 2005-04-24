@@ -9,9 +9,9 @@ Source0:	%{name}_%{version}-1.tar.gz
 Source1:	wlite-0.8.1.tar.gz
 # Source1-md5:	03a2faa33978e88ea2b9ff4679b8f2df
 Source2:	http://www.cl.cam.ac.uk/~mgk25/download/ucs-fonts.tar.gz
-# Source2-md5:	10f3f2839d686bc8490421ddb8c001b9
+# Source2-md5:	cca6a3cb6cfbde5f3ebb24278a9022a4
 Source3:	http://www.cl.cam.ac.uk/~mgk25/download/ucs-fonts-asian.tar.gz
-# Source3-md5:	cbad2d5e91bab16acf1a92f2814b3f1e
+# Source3-md5:	d3184f182c6eebfcf156d08a65696496
 Source4:	14x14cjk.bdf.gz
 # Source4-md5:	c08ab351a43a91632127f509aadc6797
 Patch0:		bogl-0.1.18-rh.patch
