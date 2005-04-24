@@ -1,0 +1,40 @@
+--- bogl/bowl.c.noexecstack	2005-02-17 18:39:23.385647088 +0100
++++ bogl/bowl.c	2005-02-17 18:40:42.681592272 +0100
+@@ -324,6 +324,14 @@
+   }
+ }
+ 
++static struct widget *callback_widget;
++
++static void
++callback (int percent)
++{
++  bowl_set_scale (callback_widget, percent);
++}
++
+ /* Start up BOWL. */
+ void
+ bowl_init (void)
+@@ -342,13 +350,6 @@
+ 
+   if (!inited)
+     {
+-      struct widget *w;
+-
+-      void callback (int percent)
+-	{
+-	  bowl_set_scale (w, percent);
+-	}
+-
+       bowl_init_palette(&pixmap_tux75);
+ 
+       bowl_flush ();
+@@ -356,7 +357,7 @@
+         {
+           bowl_title (_("Please wait"));
+           bowl_new_text (_("Detecting mice..."));
+-          w = bowl_new_scale (100);
++          callback_widget = bowl_new_scale (100);
+           bowl_layout ();
+           boml_init (callback);
+         }

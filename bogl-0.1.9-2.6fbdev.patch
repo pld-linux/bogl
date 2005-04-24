@@ -1,0 +1,15 @@
+--- bogl/bogl.c.26fb	2004-01-29 17:08:06.000000000 -0500
++++ bogl/bogl.c	2004-02-17 20:49:01.396524931 -0500
+@@ -136,7 +136,11 @@
+   if (-1 == ioctl (fb, FBIOGET_FSCREENINFO, &fb_fix)
+       || -1 == ioctl (fb, FBIOGET_VSCREENINFO, &fb_var))
+     return bogl_fail ("reading screen info: %s", strerror (errno));
+-  
++
++  fb_var.activate = FB_ACTIVATE_NXTOPEN;
++  if (-1 == ioctl (fb, FBIOPUT_VSCREENINFO, &fb_var))
++      return bogl_fail ("setting fb screeninfo: %s", strerror (errno));
++
+   bogl_xres = fb_var.xres;
+   bogl_yres = fb_var.yres;
+   bogl_bpp = fb_var.bits_per_pixel;

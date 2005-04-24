@@ -1,0 +1,27 @@
+--- bogl/wlite/GNUmakefile.fpic	2002-12-10 22:33:29.000000000 -0500
++++ bogl/wlite/GNUmakefile	2003-02-11 01:00:50.000000000 -0500
+@@ -38,6 +38,11 @@
+    CDFLAGS += -DNDEBUG
+ endif
+ 
++architecture := $(shell uname -m)
++ifneq (,$(filter x86_64 s390 s390x ppc sparc,$(architecture)))
++override CFLAGS += -fPIC
++endif
++
+ ifeq "diet" "$(basename $(firstword $(CC)))"
+    FATCC = $(wordlist 2,$(words $(CC)),$(CC))
+    FATCFLAGS = $(CFLAGS) -std=gnu99
+--- bogl/Makefile.fpic	2003-02-11 01:01:04.000000000 -0500
++++ bogl/Makefile	2003-02-11 01:01:22.000000000 -0500
+@@ -46,6 +46,10 @@
+ bogl-tcfb.c bogl-tcfb.h bogl-test.c bogl.c bogl.h boglP.h boml.c	\
+ boml.h bowl-boxes.c bowl.c bowl.h pngtobogl.c
+ 
++ifneq (,$(filter x86_64 s390 s390x ppc sparc,$(architecture)))
++override CFLAGS += -fPIC
++endif
++
+ ifeq (,)
+ 	FBCFLAGS += -DBOGL_CFB_FB=1
+ 	LIBBOGLOBJECTS += bogl-cfb.o bogl-pcfb.o bogl-tcfb.o

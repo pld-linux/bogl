@@ -1,0 +1,1006 @@
+--- bogl/bogl-bgf.c.rh	2001-12-01 18:04:42.000000000 +0100
++++ bogl/bogl-bgf.c	2005-03-04 20:26:28.390051760 +0100
+@@ -1,44 +1,129 @@
+-
+-#include <fcntl.h>
++#include <errno.h>
++#include <stddef.h>
++#include <stdio.h>
++#include <stdlib.h>
+ #include <string.h>
+-#include <sys/mman.h>
+-#include <sys/stat.h>
+-#include <sys/types.h>
+-#include <unistd.h>
++#include <zlib.h>
++#include <stdint.h>
+ 
++#include "bogl-bgf.h"
+ #include "bogl.h"
+-#include "bogl-font.h"
+ 
+-struct bogl_font *bogl_mmap_font(char *file)
+-{
+-  int fd;
+-  struct stat buf;
+-  void *f;
+-  struct bogl_font *font;
+-
+-  fd = open(file, O_RDONLY);
+-  if (fd == -1)
+-    return 0;
+-
+-  if (fstat(fd, &buf))
+-    return 0;
+-
+-  f = mmap(0, buf.st_size, PROT_READ, MAP_SHARED, fd, 0);
+-  if (f == (void *)-1)
+-    return 0;
+-
+-  if (memcmp("BGF1", f, 4))
+-    return 0;
+-
+-  font = (struct bogl_font *)malloc(sizeof(struct bogl_font));
+-  if (!font)
+-    return 0;
+-
+-  memcpy(font, f + 4, sizeof(*font));
+-  font->name = ((void *)font->name - (void *)0) + f;
+-  font->offset = ((void *)font->offset - (void *)0) + f;
+-  font->index = ((void *)font->index - (void *)0) + f;
+-  font->content = ((void *)font->content - (void *)0) + f;
++#define FONT_SIGNATURE "BGF1"
++
++static size_t get_gz_file_size(const char *path) {
++    size_t size = 0;
++    unsigned char buffer[4] = { 0 };
++    FILE *stream = NULL;
++ 
++    stream = fopen(path, "rb");
++    if (stream == NULL) {
++	perror(path);
++	return -1;
++    }
++    if (fread(buffer, sizeof(char), 2, stream) != 2) {
++        if (ferror(stream)) {
++	    perror(path);
++	    return -1;
++	}
++    }
++    if (memcmp(buffer, "\037\213", 2) == 0) {
++        uint32_t isize = 0;
++
++        if (fseek(stream, -4L, SEEK_END) == EOF) {
++	    perror(path);
++	    return -1;
++	}
++        if (fread(buffer, sizeof(char), (size_t) 4, stream) != 4) {
++            if (ferror(stream)) {
++		perror(path);
++		return -1;
++	    }
++            else {
++                fprintf(stderr, "%s: invalid gzip file\n", path);
++                return -1;
++            }
++        }
++        isize  = buffer[0];
++        isize |= buffer[1] << 8;
++        isize |= buffer[2] << 16;
++        isize |= buffer[3] << 24;
++
++	/* FIXME: ISIZE is not a reliable indicator of size for files >4GB.
++	 * On the other hand, if you have a font >4GB, you've got issues.
++	 */
++        size = (size_t) isize;
++    }
++    else {
++        if (fseek(stream, 0L, SEEK_END) == EOF) {
++	    perror(path);
++	    return -1;
++	}
++        if ((int) (size = (size_t) ftell(stream)) == EOF) {
++	    perror(path);
++	    return -1;
++	}
++    }
++    if (fclose(stream) == EOF) {
++	perror(path);
++	return -1;
++    }
++    return size;
++}
+ 
+-  return font;
++struct bogl_font *bogl_load_font(const char *path) {
++    size_t size;
++    int errnum;
++    gzFile file;
++    void *bgf;
++    struct bogl_font *font;
++
++    size = (size_t) get_gz_file_size(path);
++    if (size == (size_t) -1)
++	return NULL;
++    if ((bgf = malloc(size)) == NULL) {
++	perror(path);
++	return NULL;
++    }
++    file = gzopen(path, "rb");
++    if (file == NULL) {
++        if (errno == 0) {
++            errno = ENOMEM;       // if 0 then zlib error == Z_MEM_ERROR
++        }
++	perror(path);
++	return NULL;
++    }
++    if (gzread(file, bgf, size) == -1) {
++        const char *msg = gzerror(file, &errnum);
++
++        if (errnum == Z_ERRNO) {
++            msg = strerror(errno);
++        }
++        fprintf(stderr, "%s: %s\n", path, msg);
++	return NULL;
++    }
++    if (gzclose(file) < 0) {
++        const char *msg = gzerror(file, &errnum);
++
++        if (errnum == Z_ERRNO) {
++            msg = strerror(errno);
++        }
++        fprintf(stderr, "%s: %s\n", path, msg);
++	return NULL;
++    }
++    if (memcmp(FONT_SIGNATURE, bgf, strlen(FONT_SIGNATURE)) != 0) {
++        fprintf(stderr, "%s: not a BGF font\n", path);
++	return NULL;
++    }
++    font = (struct bogl_font *) malloc(sizeof(struct bogl_font));
++    if (font == NULL) {
++	perror(path);
++	return NULL;
++    }
++    memcpy(font, bgf + strlen(FONT_SIGNATURE), sizeof(struct bogl_font));
++    font->name    = bgf + (ptrdiff_t) font->name;
++    font->offset  = bgf + (ptrdiff_t) font->offset;
++    font->index   = bgf + (ptrdiff_t) font->index;
++    font->content = bgf + (ptrdiff_t) font->content;
++    return font;
+ }
+--- bogl/bterm.c.rh	2004-05-06 04:57:06.000000000 +0200
++++ bogl/bterm.c	2005-03-04 20:26:28.397050696 +0100
+@@ -64,6 +64,7 @@
+ 
+ static int child_pid = 0;
+ static struct termios ttysave;
++static int spawn = 0;
+ 
+ /* This first tries the modern Unix98 way of getting a pty, followed by the
+  * old-fashioned BSD way in case that fails. */
+@@ -123,15 +124,61 @@
+ 
+ void sigchld(int sig)
+ {
+-  if (wait(0) == child_pid) {
++  int status;
++  if (wait(&status) == child_pid) {
+     child_pid = 0;
+     /* Reset ownership and permissions of ttyfd device? */
++#ifdef DIET
++    bogl_done();
++#endif
+     tcsetattr(0, TCSAFLUSH, &ttysave);
+-    exit(0);
++    /* exit with the same status as the child so that if our child
++     * exits uncleanly, causing bogl to exit and we want to be able
++     * to know how the child exited */
++    if (WIFEXITED(status))
++        exit(0);
++    else
++        exit(WEXITSTATUS(status));
+   }
+   signal(SIGCHLD, sigchld);
+ }
+ 
++/* return 0 if parent, 1 if child */
++int spawn_child(int ptyfd, int ttyfd)
++{
++  fflush(stdout);
++  child_pid = fork();
++  if (child_pid) {
++    /* Change ownership and permissions of ttyfd device! */
++    signal(SIGCHLD, sigchld);
++    return 0;
++  }
++  setenv("TERM", "bterm", 1);
++
++  sleep(1);
++  close(ptyfd);
++
++  dup2(ttyfd, 0);
++  dup2(ttyfd, 1);
++  dup2(ttyfd, 2);
++
++  bogl_close();
++
++  if (ttyfd > 2)
++    close(ttyfd);
++
++  setgid(getgid());
++  setuid(getuid());
++
++  setsid();
++  if (ioctl(0, TIOCSCTTY, (char *)0)) {
++      perror("Unable to set a new controlling tty: ");
++  }
++
++  return 1;
++}
++
++
+ void spawn_shell(int ptyfd, int ttyfd, const char *command)
+ {
+   fflush(stdout);
+@@ -151,9 +198,11 @@
+   dup2(ttyfd, 0);
+   dup2(ttyfd, 1);
+   dup2(ttyfd, 2);
++  
+   if (ttyfd > 2)
+     close(ttyfd);
+   tcsetattr(0, TCSANOW, &ttysave);
++
+   setgid(getgid());
+   setuid(getuid());
+ 
+@@ -172,14 +221,14 @@
+   ioctl(ttyfd, TIOCSWINSZ, &win);
+ }
+ 
+-static char *font_name;
++static char *font_name = "/usr/lib/bogl/font.bgf.gz";
+ static struct bogl_term *term;
+ 
+ void reload_font(int sig)
+ {
+   struct bogl_font *font;
+ 
+-  font = bogl_mmap_font (font_name);
++  font = bogl_load_font (font_name);
+   if (font == NULL)
+     {
+       fprintf(stderr, "Bad font\n");
+@@ -224,6 +273,10 @@
+                   o = argv[i][1];
+                   break;
+ 
++	      case 's':
++		  spawn = 1;
++		  break;
++		  
+               default:
+                   printf ("unknown option: %c\n", argv[i][1]);
+           }
+@@ -253,7 +306,7 @@
+     return 1;
+   }
+ 
+-  if ((font = bogl_mmap_font(font_name)) == NULL) {
++  if ((font = bogl_load_font(font_name)) == NULL) {
+     fprintf(stderr, "Bad font\n");
+     return 1;
+   }
+@@ -267,7 +320,7 @@
+ 
+   term = bogl_term_new(font);
+   if (!term)
+-    exit(1);
++      return 1;
+ 
+   bogl_set_palette(0, 16, palette);
+ 
+@@ -278,7 +331,11 @@
+     exit(1);
+   }
+ 
+-  spawn_shell(ptyfd, ttyfd, command == NULL ? "/bin/sh" : command);
++  if (spawn) {
++      if (spawn_child(ptyfd, ttyfd)) 
++	  return 0;
++  } else
++      spawn_shell(ptyfd, ttyfd, command == NULL ? "/bin/sh" : command);
+ 
+   signal(SIGHUP, reload_font);
+ 
+@@ -290,7 +347,7 @@
+   ntio.c_cc[VTIME] = 0;
+   ntio.c_cflag |= CS8;
+   ntio.c_line = 0;
+-  tcsetattr(0, TCSAFLUSH, &ntio);
++  tcsetattr(0, TCSANOW, &ntio);
+ 
+   set_window_size(ttyfd, term->xsize, term->ysize);
+ 
+--- bogl/Makefile.rh	2003-10-05 19:47:03.000000000 +0200
++++ bogl/Makefile	2005-03-04 20:26:28.388052064 +0100
+@@ -4,12 +4,23 @@
+ SONAME = libbogl.so.0
+ SHARED_LIB = libbogl.so.0.1
+ 
++libdir = /usr/lib
++
++#architecture := $(shell dpkg-architecture -qDEB_BUILD_GNU_CPU)
++architecture := $(patsubst i%86,i386,$(shell uname -m))
++
++ifeq ($(architecture), none)
++USEDIET := 1
++DIETCC = diet gcc
++else
++USEDIET := 0
++DIETCC = gcc
++endif
++
+ CFLAGS = -O2 -g -D_GNU_SOURCE
+ WARNCFLAGS += -Wall -D_GNU_SOURCE
+ ALLCFLAGS = $(CFLAGS) $(WARNCFLAGS) $(FBCFLAGS)
+ 
+-architecture := $(shell dpkg-architecture -qDEB_BUILD_GNU_CPU)
+-
+ LIBOBJECTS = $(LIBBOGLOBJECTS) $(LIBBOMLOBJECTS) $(LIBBOWLOBJECTS)	\
+ 	$(LIBRSRCOBJECTS)
+ LIBBOGLOBJECTS = bogl.o bogl-font.o
+@@ -17,6 +28,19 @@
+ LIBBOWLOBJECTS = bowl.o symbol.o
+ LIBRSRCOBJECTS = helvB10.o helvB12.o helvR10.o timBI18.o tux75.o
+ 
++LIBBTERM = libbterm.a
++LIBBTERMOBJECTS = bterm-lib.o bogl-term.o bogl-bgf.o
++
++ifeq ($(USEDIET), 1)
++LIBBTERMDIET = libbtermdiet.a
++LIBBTERMDOBJS = $(patsubst %.o,%.do,$(LIBBTERMOBJECTS))
++
++LIBBOGLDIET = libbogldiet.a
++LIBBOGLDOBJS = $(patsubst %.o,%.do,$(LIBOBJECTS))
++
++BTERMDIET = bterm-diet
++endif
++
+ SOURCES_DEP = arrow.c bdftobogl.c bogl-cfb.c bogl-cfb.h bogl-cfb8.c	\
+ bogl-cfb8.h bogl-font.c bogl-font.h bogl-pcfb.c bogl-pcfb.h		\
+ bogl-tcfb.c bogl-tcfb.h bogl-test.c bogl.c bogl.h boglP.h boml.c	\
+@@ -38,7 +62,7 @@
+ GENERATED = helvB10.c helvB12.c helvR10.c timBI18.c tux75.c
+ 
+ #		 libutf8/libutf8_plug.so unifont-reduced.bgf
+-all:    depend $(SHARED_LIB) $(LIB) bterm bdftobogl reduce-font
++all:    depend subdirs $(SHARED_LIB) $(LIB) bterm bdftobogl reduce-font $(LIBBTERM) $(LIBBTERMDIET) $(LIBBOGLDIET) $(BTERMDIET)
+ 
+ %.lo: %.c
+ 	$(CC) $(ALLCFLAGS) -o $@ -fPIC -c $<
+@@ -46,6 +70,16 @@
+ %.o: %.c
+ 	$(CC) $(ALLCFLAGS) -o $@ -c $<
+ 
++subdirs:
++	cd wlite;\
++	make SMALL=1 CC="$(DIETCC)"
++ifeq ($(USEDIET), 1)
++	cd wlite;\
++	mv libwlite.a libwlitediet.a;\
++	make distclean;\
++	make SMALL=1 CC="gcc"
++endif
++
+ $(SHARED_LIB): $(OBJECTS:%.o=%.lo)
+ 	$(CC) -shared -Wl,-soname,$(SONAME) -o $(SHARED_LIB) $(OBJECTS:%.o=%.lo)
+ 
+@@ -68,9 +102,36 @@
+ 
+ reduce-font: reduce-font.c
+ 
++bterm-lib.o: bterm.c
++	$(CC) $(ALLCFLAGS) -o $@ -c -Dmain=bterm_main $<
++
++bterm-lib.do: bterm.c
++	diet $(CC) $(ALLCFLAGS) -DDIET -o $@ -c -Dmain=bterm_main $<
++
++ifeq ($(architecture), i386)
++  DFBCFLAGS := -DBOGL_VGA16_FB=1 -DDIET
++else
++  DFBCFLAGS := $(FBCFLAGS) -DDIET
++endif 
++
++%.do: %.c
++	diet $(CC) $(DFBCFLAGS) -c $(CFLAGS) -o $@ $<
++
++$(LIBBTERM): $(LIBBTERMOBJECTS)
++	rm -f $@
++	ar rcs $@ $^
++
++$(LIBBTERMDIET): $(LIBBTERMDOBJS)
++	rm -f $@
++	ar rcs $@ $^
++
+ $(LIB): $(OBJECTS)
+-	rm -f $(LIB)
+-	ar rcs $(LIB) $(OBJECTS)
++	rm -f $@
++	ar rcs $@ $^
++
++$(LIBBOGLDIET): $(LIBBOGLDOBJS)
++	rm -f $@
++	ar rcs $@ $^
+ 
+ bogl-test: $(LIB) bogl-test.c tux75.o
+ 	$(CC) $(ALLCFLAGS) -o bogl-test bogl-test.c tux75.o $(LIB)
+@@ -79,9 +140,14 @@
+ 	$(CC) -DSTANDALONE_TEST $(ALLCFLAGS) bowl-boxes.c $(LIBOBJECTS) -o bowl-boxes
+ 
+ bterm: $(LIB) bterm.o bogl-term.o bogl-bgf.o
+-	$(CC) $+ $(LIB) -o bterm
++	$(CC) $+ $(LIB) -lz -o bterm wlite/libwlite.a
++
++bterm-diet: $(LIBBOGLDIET) $(LIBBTERMDIET) bterm-diet.c
++	diet $(CC) -g bterm-diet.c $(LIBBTERMDIET) $(LIBBOGLDIET) wlite/libwlite.a -lz -o $@
+ 
+ bdftobogl: $(LIBBOGLOBJECTS)
++	$(CC) $(ALLCFLAGS) -o $@ bdftobogl.c $^ wlite/libwlite.a
++
+ %.c: %.bdf bdftobogl
+ 	./bdftobogl $< > $@
+ 
+@@ -98,9 +164,11 @@
+ 	rm -rf reduce-font bterm bdftobogl pngtobogl *.o $(GENERATED) *-test lang.h tmp.*.c bowl-boxes $(LIB) unifont-reduced.bgf unifont-reduced.bdf
+ 	rm -f $(OBJECTS:%.o=%.lo) $(SHARED_LIB)
+ 	rm -f .depend
++	cd wlite; make clean
+ 
+ distclean: clean
+ 	rm -f $(LIB) .depend *~ .nfs*
++	cd wlite; make distclean
+ 
+ force:
+ 
+@@ -108,12 +176,14 @@
+ include .depend
+ endif
+ 
++INSTLIBS = $(LIB) $(LIBBTERM) $(LIBBTERMDIET) $(LIBBOGLDIET)
++
+ install: all
+-	install -d $(DESTDIR)/usr/lib $(DESTDIR)/usr/include/bogl $(DESTDIR)/usr/bin
+-	install -m644 $(SHARED_LIB) $(DESTDIR)/usr/lib/$(SHARED_LIB)
+-	ln -s $(SHARED_LIB) $(DESTDIR)/usr/lib/$(DEVLINK)
+-	ln -s $(SHARED_LIB) $(DESTDIR)/usr/lib/$(SONAME)
+-	install -m644 $(LIB) $(DESTDIR)/usr/lib/$(LIB)
++	install -d $(DESTDIR)/$(libdir) $(DESTDIR)/usr/include/bogl $(DESTDIR)/usr/bin
++	install -m644 $(SHARED_LIB) $(DESTDIR)/$(libdir)/$(SHARED_LIB)
++	ln -sf $(SHARED_LIB) $(DESTDIR)/$(libdir)/$(DEVLINK)
++	ln -sf $(SHARED_LIB) $(DESTDIR)/$(libdir)/$(SONAME)
++	install -m644 $(INSTLIBS) $(DESTDIR)/$(libdir)
+ 	install -m644 *.h $(DESTDIR)/usr/include/bogl
+ 	install -m755 bdftobogl mergebdf bterm pngtobogl reduce-font $(DESTDIR)/usr/bin
+ 	install -d $(DESTDIR)/usr/share/terminfo
+--- bogl/reduce-font.c.rh	2001-12-01 18:04:42.000000000 +0100
++++ bogl/reduce-font.c	2005-03-04 20:26:28.398050544 +0100
+@@ -42,12 +42,31 @@
+     printf (": %d\n", l);
+ }
+ 
++char *
++cat_line(char *sofar, const char *line) {
++	char *buf;
++	size_t length;
++
++	length = sofar == NULL ? 0 : strlen(sofar);
++	length += strlen(line);
++	length++;
++	buf = sofar == NULL
++		? calloc(length, sizeof(char))
++		: realloc(sofar, sizeof(char) * length);
++	if (buf == NULL) {
++		perror(NULL);
++		exit(EXIT_FAILURE);
++	}
++	return strcat(buf, line);
++}
++
+ int
+ main (int argc, char **argv)
+ {
+     FILE *font;
+     char *buffer = NULL;
+     char *locale = setlocale (LC_CTYPE, "");
++    char *onebdffmtchar = NULL;
+     int error = 0;
+ 
+     if (locale == NULL) {
+@@ -152,14 +171,29 @@
+                 if (!header)
+                 {
+                     if (strncmp (buf, "STARTCHAR ", 10) == 0)
++		    {
++			    if (onebdffmtchar != NULL)
++			    {
++				    free(onebdffmtchar);
++				    onebdffmtchar = NULL;
++			    }
++
++		    }
++		    onebdffmtchar = cat_line(onebdffmtchar, buf);
++
++                    if (strncmp (buf, "ENCODING ", 9) == 0)
+                     {
+-                        wc = strtol (buf + 12, NULL, 16);
++                        wc = strtol (buf + 9, NULL, 10);
+ 
+                         docopy = used[wc / 32] & (1 << (wc % 32));
+                     }
++		    else if (strncmp (buf, "ENDCHAR", 7) == 0)
++		    {
++                        if (docopy)
++                            fputs (onebdffmtchar, stdout);
++			docopy = 0;
++		    }
+ 
+-                    if (docopy)
+-                        fprintf (stdout, buf);
+                 }
+             }
+ 
+--- bogl/bogl-term.h.rh	2003-11-05 04:01:47.000000000 +0100
++++ bogl/bogl-term.h	2005-03-04 20:26:28.393051304 +0100
+@@ -2,7 +2,7 @@
+ #ifndef bogl_term_h
+ #define bogl_term_h
+ 
+-#include <wchar.h>
++#include "wlite/wlite_wchar.h"
+ 
+ struct bogl_term {
+   const struct bogl_font *font;
+@@ -24,6 +24,7 @@
+   wchar_t **cchars; /* combining chars in cell, or 0 */
+   int yorig; /* increment this to scroll */
+   int acs;
++  char utf[6]; size_t utfn;
+ };
+ 
+ struct bogl_term *bogl_term_new(struct bogl_font *font);
+--- bogl/bogl-bgf.h.rh	2001-12-01 18:04:42.000000000 +0100
++++ bogl/bogl-bgf.h	2005-03-04 20:26:28.390051760 +0100
+@@ -1,2 +1,2 @@
+ 
+-struct bogl_font *bogl_mmap_font(char *file);
++struct bogl_font *bogl_load_font(const char *file);
+--- bogl/bogl.c.rh	2004-05-06 04:57:06.000000000 +0200
++++ bogl/bogl.c	2005-03-04 20:26:28.395051000 +0100
+@@ -53,6 +53,11 @@
+ #include "bogl-pcfb.h"
+ #include "bogl-tcfb.h"
+ #endif
++
++#if DIET
++#include "wlite/wlite_wchar.h"
++#endif
++
+ 
+ /* BOGL main code. */
+ 
+@@ -196,9 +201,11 @@
+ 
+     ioctl (fb, FBIOGETCMAP, &cmap);
+   }
+-  
++
++#ifndef DIET
+   if (!status)
+     atexit (bogl_done);
++#endif
+   status = 2;
+ 
+   return 1;
+@@ -284,6 +291,11 @@
+   close (tty);
+   close (fb);
+ }
++
++void bogl_close(void) {
++  close (tty);
++  close (fb);
++}
+ 
+ /* Keyboard interface. */
+ 
+@@ -621,9 +633,11 @@
+   if (error)
+     return 0;
+ 
++#ifndef DIET
+   va_start (args, format);
+   vasprintf (&error, format, args);
+   va_end (args);
+-
++#endif
++  
+   return 0;
+ }
+--- bogl/bogl.h.rh	2004-05-06 04:57:06.000000000 +0200
++++ bogl/bogl.h	2005-03-04 20:26:28.395051000 +0100
+@@ -22,12 +22,7 @@
+ #include <stdlib.h>
+ #include <sys/types.h>
+ 
+-/* As a temporary measure, we do this here rather than in config.h,
+-   which would probably make more sense. */
+-#include <limits.h>
+-#ifndef MB_LEN_MAX
+-#define MB_LEN_MAX 6 /* for UTF-8 */
+-#endif
++#include "wlite/wlite_wchar.h"
+ 
+ /* Proportional font structure definition. */
+ struct bogl_font
+@@ -73,6 +68,7 @@
+ /* Generic routines. */
+ int bogl_init (void);
+ void bogl_done (void);
++void bogl_close (void);
+ const char *bogl_error (void);
+ 
+ void bogl_gray_scale (int make_gray);
+--- bogl/bdftobogl.c.rh	2004-03-08 05:39:59.000000000 +0100
++++ bogl/bdftobogl.c	2005-03-04 20:26:28.389051912 +0100
+@@ -24,9 +24,14 @@
+ #include <string.h>
+ #include <unistd.h>
+ #include <wctype.h>
++#include <limits.h>
+ #include "bogl.h"
+ #include "bogl-font.h"
+ 
++#ifdef DIET
++#include "wlite/wlite_wchar.h"
++#endif
++
+ static void print_glyph (u_int32_t *content, int height, int w);
+ static int bogl_write_font(int fd, struct bogl_font *font);
+ 
+--- /dev/null	2005-03-04 18:11:22.289784760 +0100
++++ bogl/bterm-diet.c	2005-03-04 20:26:28.396050848 +0100
+@@ -0,0 +1,7 @@
++extern int bterm_main(int argc, char **argv);
++
++int main(int argc, char **argv)
++{
++    bterm_main(argc, argv);
++}
++     
+--- bogl/bogl-term.c.rh	2003-11-05 05:38:22.000000000 +0100
++++ bogl/bogl-term.c	2005-03-04 20:26:55.737894256 +0100
+@@ -24,6 +24,10 @@
+  * described by the terminfo source in "bterm.ti".
+  */
+ 
++#include <limits.h>
++#include <string.h>
++#include <unistd.h>
++
+ #include "bogl.h"
+ #include "bogl-term.h"
+ 
+@@ -50,8 +54,10 @@
+   term->xsize = bogl_xres / term->xstep;
+   term->ysize = bogl_yres / term->ystep;
+   term->xpos = 0, term->ypos = 0;
+-  term->fg = term->def_fg = 0;
+-  term->bg = term->def_bg = 7;
++
++  /* make default colors like newt tools and bsod! */
++  term->fg = term->def_fg = 7;        // foreground = white
++  term->bg = term->def_bg = 4;  // background = blue
+   term->rev = 0;
+   term->state = 0;
+   term->cur_visible = 1;
+@@ -191,14 +197,16 @@
+         term->screenbg[p] = term->bg;
+         term->screenul[p] = 0;
+         term->dirty[p] = 1;
+-        free (term->cchars[p]);
+-        term->cchars[p] = 0;
++	if (term->cchars[p] != NULL) {
++	        free (term->cchars[p]);
++	        term->cchars[p] = 0;
++	}
+     }
+ }
+ 
+ static void
+ put_char (struct bogl_term *term, int x, int y, wchar_t wc, wchar_t *cchars,
+-	  int fg, int bg, int ul)
++          int fg, int bg, int ul)
+ {
+     char buf[MB_LEN_MAX];
+     int j, k, r, w;
+@@ -296,8 +304,10 @@
+       term->screenbg[i] = term->bg;
+       term->screenul[i] = 0;
+     }
+-  free (term->cchars[i]);
+-  term->cchars[i] = 0;
++  if (term->cchars[i] != NULL) {
++	free (term->cchars[i]);
++	term->cchars[i] = 0;
++  }
+ }
+ 
+ void
+@@ -308,12 +318,14 @@
+     int i, j, w, txp, f, b, use_acs, x, y;
+     char buf[MB_LEN_MAX];
+ 
++    /* thunk the multibyte state var to the initial setting for the
++     * sake of glibc.
++     */
++    memset(&term->ps, 0, sizeof(term->ps));
++
+     k = 0;
+     while (1)
+     {
+-	s += k;
+-	n -= k;
+-
+ 	/* The n <= 0 check was originally only necessary because of a bug
+ 	   (?) in glibc 2.2.3, as opposed to libiconv.  glibc will
+ 	   successfully convert a zero-length string.  It is also the only
+@@ -323,24 +335,30 @@
+ 	if (n <= 0)
+ 	    break;
+ 
+-	k = mbrtowc (&wc, s, n, &term->ps);
++	/* queue up the characters and flush immediately when we're out
++	 * of input or we have a valid character. catches cases where a utf-8
++	 * sequence has been split between two buffered reads
++	 */
++	while (term->utfn < sizeof(term->utf) && n-- > 0) {
++	    term->utf[term->utfn++] = *s++;
++	    k = mbrtowc (&wc, term->utf, term->utfn, &term->ps);
++	    if (k != (size_t) -2) {
++		term->utfn = 0;
++		break;
++	    }
++	}
+ 
+ 	/* If we fail to write a character, skip forward one byte and continue.
+ 	   There's not much we can do to recover, but it's better than discarding
+ 	   the whole line.  */
+-	if (k == (size_t) -1)
+-	{
++	if (k == (size_t) -1) {
++	    k = mbrtowc (NULL, NULL, 0, &term->ps);
+ 	    k = 1;
+-	    /* The mbrtowc documentation suggests that we could use mbrtowc
+-	       to reset term->ps, but that doesn't work in practice; ps is in
+-	       an undefined state which appears to be the illegal state to make
+-	       the reset call in.  Use memset.  */
+-	    memset (&term->ps, 0, sizeof (term->ps));
+ 	    continue;
+ 	}
+ 	else if (k == (size_t) -2)
+ 	{
+-	    /* Incomplete character, so we exit and wait for more to arrive.  */
++	    k = 0;
+ 	    break;
+ 	}
+ 
+@@ -353,6 +371,21 @@
+         if (wc == 0)            /* 0 has a special meaning in term->screen[] */
+             continue;
+ 
++        if (wc == 7) {          /* bell=^G: flash screen by XORing it twice */
++            for (i = 0; i < term->xsize * term->ysize; i++) {
++                term->screenfg[i] = term->screenfg[i] ^ 0x7;
++                term->screenbg[i] = term->screenbg[i] ^ 0x7;
++            }
++            bogl_term_redraw(term);
++            usleep(100000); // pause 1/10th of a second
++            for (i = 0; i < term->xsize * term->ysize; i++) {
++                term->screenfg[i] = term->screenfg[i] ^ 0x7;
++                term->screenbg[i] = term->screenbg[i] ^ 0x7;
++            }
++            bogl_term_redraw(term);
++            continue;
++        }
++
+         if (wc == 8)
+         {                       /* cub1=^H */
+             if (term->xpos)
+@@ -395,17 +428,17 @@
+             continue;
+         }
+ 
+-	if (wc == 14)
+-	{
+-	    term->acs = 1;
+-	    continue;
+-	}
++        if (wc == 14)
++        {
++            term->acs = 1;
++            continue;
++        }
+ 
+-	if (wc == 15)
+-	{
+-	    term->acs = 0;
+-	    continue;
+-	}
++        if (wc == 15)
++        {
++            term->acs = 0;
++            continue;
++        }
+ 
+         if (wc == 27)
+         {                       /* ESC = \E */
+@@ -519,8 +552,10 @@
+ 	                    term->screenbg[i] = term->bg;
+ 	                    term->screenul[i] = 0;
+ 	                }
+-                        free (term->cchars[i]);
+-                        term->cchars[i] = 0;
++			if (term->cchars[i] != NULL) {
++			    free (term->cchars[i]);
++			    term->cchars[i] = 0;
++			}
+                     }
+                 }
+                 else if (term->state == 1 && term->arg[0] == 0)
+@@ -552,8 +587,10 @@
+                             term->screenbg[i] = term->bg;
+                             term->screenul[i] = 0;
+                         }
+-                        free (term->cchars[i]);
+-                        term->cchars[i] = 0;
++			if (term->cchars[i] != NULL) {
++			    free (term->cchars[i]);
++			    term->cchars[i] = 0;
++			}
+                     }
+                 }
+                 term->state = 0;
+@@ -608,9 +645,9 @@
+             continue;
+         }
+ 
+-	use_acs = 0;
+-	if (term->acs)
+-	{
++        use_acs = 0;
++        if (term->acs)
++        {
+             /* FIXME: If we are using a non-UTF-8 locale, the wcwidth
+                call below will almost certainly fail.  We should have
+                hardcoded results to fall back on in that case.  This
+@@ -618,50 +655,50 @@
+                less dependent on mbrtowc and wctomb, which I really
+                haven't figured out how to do yet.  They aren't really
+                appropriate for a terminal emulator to be using!  */
+-	    switch (wc)
+-	    {
+-	    case 'q':
+-	      wc = 0x2500;
+-	      use_acs = 1;
+-	      break;
+-	    case 'j':
+-	      wc = 0x2518;
+-	      use_acs = 1;
+-	      break;
+-	    case 'x':
+-	      wc = 0x2502;
+-	      use_acs = 1;
+-	      break;
+-	    case 'a':
+-	      wc = 0x2591;
+-	      use_acs = 1;
+-	      break;
+-	    case 'm':
+-	      wc = 0x2514;
+-	      use_acs = 1;
+-	      break;
+-	    case 'l':
+-	      wc = 0x250c;
+-	      use_acs = 1;
+-	      break;
+-	    case 'k':
+-	      wc = 0x2510;
+-	      use_acs = 1;
+-	      break;
+-	    case 'u':
+-	      wc = 0x2524;
+-	      use_acs = 1;
+-	      break;
+-	    case 't':
+-	      wc = 0x251c;
+-	      use_acs = 1;
+-	      break;
+-	    }
+-	}
++            switch (wc)
++            {
++            case 'q':
++              wc = 0x2500;
++              use_acs = 1;
++              break;
++            case 'j':
++              wc = 0x2518;
++              use_acs = 1;
++              break;
++            case 'x':
++              wc = 0x2502;
++              use_acs = 1;
++              break;
++            case 'a':
++              wc = 0x2591;
++              use_acs = 1;
++              break;
++            case 'm':
++              wc = 0x2514;
++              use_acs = 1;
++              break;
++            case 'l':
++              wc = 0x250c;
++              use_acs = 1;
++              break;
++            case 'k':
++              wc = 0x2510;
++              use_acs = 1;
++              break;
++            case 'u':
++              wc = 0x2524;
++              use_acs = 1;
++              break;
++            case 't':
++              wc = 0x251c;
++              use_acs = 1;
++              break;
++            }
++        }
+ 
+-	/* At this point, if we can not decode a character because of ACS,
+-	   replace it with a space to minimize graphical corruption.  */
+-        if ((w = wcwidth (wc)) < 0)
++        /* At this point, if we can not decode a character because of ACS,
++           replace it with a space to minimize graphical corruption.  */
++        if (wc < 0 || wc > 0xFFFF || (w = wcwidth (wc)) < 0)
+         {
+             if (use_acs)
+             {
+@@ -705,8 +742,10 @@
+                             term->screenbg[i] = term->bg;
+                             term->screenul[i] = 0;
+                         }
+-                        free (term->cchars[i]);
+-                        term->cchars[i] = NULL;
++			if (term->cchars[i] != NULL) {
++			    free (term->cchars[i]);
++			    term->cchars[i] = NULL;
++			}
+                     }
+ 
+                     term->xpos = 0;
+@@ -720,8 +759,10 @@
+                 term->screenfg[i] = f;
+                 term->screenbg[i] = b;
+                 term->screenul[i] = term->ul;
+-                free (term->cchars[i]);
+-                term->cchars[i] = NULL;
++                if (term->cchars[i] != NULL) {
++                    free (term->cchars[i]);
++                    term->cchars[i] = NULL;
++                }
+ 
+                 for (j = 1; j < w; j++)
+                 {

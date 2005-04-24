@@ -1,0 +1,21 @@
+--- bogl/bogl-font.c.gcc	2005-02-17 18:52:30.428998312 +0100
++++ bogl/bogl-font.c	2005-02-17 18:52:34.254416760 +0100
+@@ -103,7 +103,7 @@
+   /* Attempt to malloc NBYTES bytes.  Sets a BOGL error message on
+      failure.  Returns the result of the malloc() operation in any
+      case. */
+-  static void *
++  void *
+   smalloc (size_t nbytes)
+   {
+     void *p = malloc (nbytes);
+--- bogl/boml.c.gcc	2001-12-01 18:04:42.000000000 +0100
++++ bogl/boml.c	2005-02-17 18:52:13.033642808 +0100
+@@ -1316,6 +1316,7 @@
+ 
+ 	default:
+ 	  /* Ignore additional extension fields. */
++            ;
+ 	}
+ 
+       curpos += len;
