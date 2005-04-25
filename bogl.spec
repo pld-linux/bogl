@@ -125,7 +125,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(644,root,root,755)
 %doc README
-%attr(755,root,root) %{_libdir}/*.so.*
+%attr(755,root,root) %{_libdir}/libbogl.so.*.*
 
 %files devel
 %defattr(644,root,root,755)
@@ -133,18 +133,21 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %{_bindir}/mergebdf
 %attr(755,root,root) %{_bindir}/pngtobogl
 %attr(755,root,root) %{_bindir}/reduce-font
-%attr(755,root,root) %{_libdir}/*.so
-%{_libdir}/*.a
+%attr(755,root,root) %{_libdir}/libbogl.so
+%{_libdir}/libbterm.a
+%{_libdir}/libwlite.a
 %{_includedir}/bogl
-%{_includedir}/wlite*
+%{_includedir}/wlite*.h
 
-# static ??? or just static-only libwlitediet.a ?
+%files static
+%defattr(644,root,root,755)
+%{_libdir}/libbogl.a
 
 %files bterm
 %defattr(644,root,root,755)
 %doc README.BOGL-bterm
 %attr(755,root,root) %{_bindir}/bterm
-# XXX: dup dir
+# XXX: dir duplicated with terminfo package
 %dir %{_datadir}/terminfo/b
 %{_datadir}/terminfo/b/bterm
 %{_libdir}/bogl
