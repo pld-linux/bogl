@@ -16,11 +16,11 @@ Source3:	http://www.cl.cam.ac.uk/~mgk25/download/ucs-fonts-asian.tar.gz
 # Source3-md5:	d3184f182c6eebfcf156d08a65696496
 Source4:	14x14cjk.bdf.gz
 # Source4-md5:	c08ab351a43a91632127f509aadc6797
-Patch0:		bogl-0.1.18-rh.patch
-Patch1:		bogl-0.1.9-fpic.patch
-Patch3:		bogl-0.1.9-2.6fbdev.patch
-Patch4:		bogl-0.1.18-gcc.patch
-Patch5:		bogl-0.1.18-noexecstack.patch
+Patch0:		%{name}-0.1.18-rh.patch
+Patch1:		%{name}-0.1.9-fpic.patch
+Patch3:		%{name}-0.1.9-2.6fbdev.patch
+Patch4:		%{name}-0.1.18-gcc.patch
+Patch5:		%{name}-0.1.18-noexecstack.patch
 URL:		http://www.stanford.edu/~blp/projects.html
 BuildRequires:	gd-devel
 BuildRequires:	libpng-devel
