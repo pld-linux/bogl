@@ -1,3 +1,5 @@
+# TODO
+# - optflags
 Summary:	A terminal program for displaying Unicode on the console
 Summary(pl):	Program terminalowy do wy¶wietlania Unikodu na konsoli
 Name:		bogl
