@@ -1,7 +1,7 @@
 # TODO
 # - optflags
 Summary:	A terminal program for displaying Unicode on the console
-Summary(pl):	Program terminalowy do wy¶wietlania Unikodu na konsoli
+Summary(pl.UTF-8):   Program terminalowy do wyÅ›wietlania Unikodu na konsoli
 Name:		bogl
 Version:	0.1.18
 Release:	1
@@ -33,14 +33,14 @@ BOGL stands for Ben's Own Graphics Library. It is a small graphics
 library for Linux kernel framebuffers. It supports only very simple
 graphics.
 
-%description -l pl
-BOGL oznacza Ben's Own Graphics Library (bibliotekê graficzn± Bena).
-Jest to ma³a biblioteka dla framebufferów j±dra Linuksa. Obs³uguje
-tylko bardzo prost± grafikê.
+%description -l pl.UTF-8
+BOGL oznacza Ben's Own Graphics Library (bibliotekÄ™ graficznÄ… Bena).
+Jest to maÅ‚a biblioteka dla framebufferÃ³w jÄ…dra Linuksa. ObsÅ‚uguje
+tylko bardzo prostÄ… grafikÄ™.
 
 %package devel
 Summary:	Development files required to build BOGL applications
-Summary(pl):	Pliki programistyczne potrzebne do budowania aplikacji BOGL
+Summary(pl.UTF-8):   Pliki programistyczne potrzebne do budowania aplikacji BOGL
 Group:		Development/Libraries
 Requires:	%{name} = %{epoch}:%{version}-%{release}
 
@@ -48,24 +48,24 @@ Requires:	%{name} = %{epoch}:%{version}-%{release}
 The bogl-devel package contains the header files for writing BOGL
 applications.
 
-%description devel -l pl
-Ten pakiet zawiera pliki nag³ówkowe do pisania aplikacji BOGL.
+%description devel -l pl.UTF-8
+Ten pakiet zawiera pliki nagÅ‚Ã³wkowe do pisania aplikacji BOGL.
 
 %package static
 Summary:	Static BOGL libraries
-Summary(pl):	Statyczne biblioteki BOGL
+Summary(pl.UTF-8):   Statyczne biblioteki BOGL
 Group:		Development/Libraries
 Requires:	%{name}-devel = %{epoch}:%{version}-%{release}
 
 %description static
 Static BOGL libraries.
 
-%description static -l pl
+%description static -l pl.UTF-8
 Statyczne biblioteki BOGL.
 
 %package bterm
 Summary:	A Unicode capable terminal program for the Linux framebuffer
-Summary(pl):	Obs³uguj±cy Unikod program terminalowy dla linuksowego framebuffera
+Summary(pl.UTF-8):   ObsÅ‚ugujÄ…cy Unikod program terminalowy dla linuksowego framebuffera
 Group:		Applications/System
 Requires:	%{name} = %{epoch}:%{version}-%{release}
 
@@ -73,9 +73,9 @@ Requires:	%{name} = %{epoch}:%{version}-%{release}
 The bterm application is a terminal emulator that displays to a Linux
 framebuffer. It is able to display Unicode text on the console.
 
-%description bterm -l pl
-Aplikacja bterm to emulator terminala wy¶wietlaj±cy obraz na
-linuksowym framebufferze. Potrafi wy¶wietlaæ tekst unikodowy na
+%description bterm -l pl.UTF-8
+Aplikacja bterm to emulator terminala wyÅ›wietlajÄ…cy obraz na
+linuksowym framebufferze. Potrafi wyÅ›wietlaÄ‡ tekst unikodowy na
 konsoli.
 
 %prep
