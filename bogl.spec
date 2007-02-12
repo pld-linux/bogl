@@ -1,7 +1,7 @@
 # TODO
 # - optflags
 Summary:	A terminal program for displaying Unicode on the console
-Summary(pl.UTF-8):   Program terminalowy do wyświetlania Unikodu na konsoli
+Summary(pl.UTF-8):	Program terminalowy do wyświetlania Unikodu na konsoli
 Name:		bogl
 Version:	0.1.18
 Release:	1
@@ -40,7 +40,7 @@ tylko bardzo prostą grafikę.
 
 %package devel
 Summary:	Development files required to build BOGL applications
-Summary(pl.UTF-8):   Pliki programistyczne potrzebne do budowania aplikacji BOGL
+Summary(pl.UTF-8):	Pliki programistyczne potrzebne do budowania aplikacji BOGL
 Group:		Development/Libraries
 Requires:	%{name} = %{epoch}:%{version}-%{release}
 
@@ -53,7 +53,7 @@ Ten pakiet zawiera pliki nagłówkowe do pisania aplikacji BOGL.
 
 %package static
 Summary:	Static BOGL libraries
-Summary(pl.UTF-8):   Statyczne biblioteki BOGL
+Summary(pl.UTF-8):	Statyczne biblioteki BOGL
 Group:		Development/Libraries
 Requires:	%{name}-devel = %{epoch}:%{version}-%{release}
 
@@ -65,7 +65,7 @@ Statyczne biblioteki BOGL.
 
 %package bterm
 Summary:	A Unicode capable terminal program for the Linux framebuffer
-Summary(pl.UTF-8):   Obsługujący Unikod program terminalowy dla linuksowego framebuffera
+Summary(pl.UTF-8):	Obsługujący Unikod program terminalowy dla linuksowego framebuffera
 Group:		Applications/System
 Requires:	%{name} = %{epoch}:%{version}-%{release}
 
