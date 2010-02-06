@@ -4,7 +4,7 @@ Summary:	A terminal program for displaying Unicode on the console
 Summary(pl.UTF-8):	Program terminalowy do wyświetlania Unikodu na konsoli
 Name:		bogl
 Version:	0.1.18
-Release:	2
+Release:	3
 Epoch:		0
 License:	GPL
 Group:		Libraries
