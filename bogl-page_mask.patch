@@ -1,0 +1,17 @@
+--- bogl/bogl.c.orig	2010-03-26 11:27:12.000000000 +0100
++++ bogl/bogl.c	2010-03-26 11:29:40.311794541 +0100
+@@ -37,13 +37,10 @@
+ #include <sys/stat.h>
+ #include <sys/time.h>
+ #include <sys/types.h>
++#include <sys/user.h>
+ #include <termios.h>
+ #include <unistd.h>
+ 
+-/* Yes, I know, we shouldn't be including headers from the kernel.  But
+-   XFree86 also uses this one (to get PAGE_MASK) so it's probably safe.  */
+-#include <asm/page.h>
+-
+ #include "bogl.h"
+ #include "boglP.h"
+ #if BOGL_VGA16_FB
