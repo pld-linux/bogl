@@ -4,7 +4,7 @@ Summary:	A terminal program for displaying Unicode on the console
 Summary(pl.UTF-8):	Program terminalowy do wyświetlania Unikodu na konsoli
 Name:		bogl
 Version:	0.1.18
-Release:	3
+Release:	4
 Epoch:		0
 License:	GPL
 Group:		Libraries
@@ -23,6 +23,7 @@ Patch1:		%{name}-0.1.9-fpic.patch
 Patch3:		%{name}-0.1.9-2.6fbdev.patch
 Patch4:		%{name}-0.1.18-gcc.patch
 Patch5:		%{name}-0.1.18-noexecstack.patch
+Patch6:		%{name}-page_mask.patch
 URL:		http://www.stanford.edu/~blp/projects.html
 BuildRequires:	gd-devel
 BuildRequires:	libpng-devel
@@ -85,6 +86,7 @@ konsoli.
 %patch3 -p1
 %patch4 -p1
 %patch5 -p1
+%patch6 -p1
 
 mkdir -p fonts
 cd fonts
@@ -92,7 +94,7 @@ tar zxf %{SOURCE2}
 tar zxf %{SOURCE3}
 
 %build
-%{__make} \
+%{__make} -j1 \
 	CFLAGS="%{rpmcflags}"
 #./mergebdf fonts/9x18.bdf fonts/18x18ja.bdf > font.bdf
 gunzip -c %{SOURCE4} > font.bdf
