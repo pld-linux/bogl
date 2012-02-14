@@ -1,0 +1,11 @@
+--- bogl/Makefile~	2012-02-14 11:22:39.000000000 +0100
++++ bogl/Makefile	2012-02-14 11:20:18.000000000 +0100
+@@ -23,7 +23,7 @@
+ 
+ LIBOBJECTS = $(LIBBOGLOBJECTS) $(LIBBOMLOBJECTS) $(LIBBOWLOBJECTS)	\
+ 	$(LIBRSRCOBJECTS)
+-LIBBOGLOBJECTS = bogl.o bogl-font.o
++LIBBOGLOBJECTS = bogl.o bogl-font.o wlite/wlite_mbtowc.o wlite/wlite_0_mbstate_.o wlite/wlite_mbrtowc.o
+ LIBBOMLOBJECTS = arrow.o boml.o
+ LIBBOWLOBJECTS = bowl.o symbol.o
+ LIBRSRCOBJECTS = helvB10.o helvB12.o helvR10.o timBI18.o tux75.o
