@@ -1,0 +1,11 @@
+--- bogl/reduce-font.c.orig	2013-07-14 19:51:19.125683835 +0200
++++ bogl/reduce-font.c	2013-07-14 19:51:32.319146874 +0200
+@@ -146,7 +146,7 @@
+                     else if (strncmp (buf, "STARTCHAR ", 10) == 0)
+                         header = 0;
+                     else
+-                        fprintf (stdout, buf);
++                        fprintf (stdout, "%s", buf);
+                 }
+                 
+                 if (!header)
